@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS tracking_tasks;
+DROP TABLE IF EXISTS users;
