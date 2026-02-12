@@ -3,9 +3,9 @@ package domain
 // Продукт из магазина
 // Получаем из python api
 type Product struct {
-	Name       string
-	URL        string
-	Avaidility int
+	Name         string
+	URL          string
+	Availability int
 }
 
 // Магазин на сайте
