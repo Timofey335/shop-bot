@@ -20,11 +20,11 @@ func NewShopService(apiURL string) *ShopService {
 }
 
 func (s *ShopService) GetShops(ctx context.Context) ([]domain.Shop, error) {
+	// fmt.Println("shop.getshops")
 	shops, err := s.client.GetShops(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("cannot fetch shops: %w", err)
 	}
-
 	return shops, nil
 }
 

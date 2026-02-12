@@ -32,6 +32,7 @@ func (c *Client) SetMaxRetries(n int) {
 }
 
 func (c *Client) doRequest(ctx context.Context, method, path string, params url.Values) ([]byte, error) {
+
 	fullURL := c.baseURL + path
 	if len(params) > 0 {
 		fullURL += "?" + params.Encode()
@@ -64,7 +65,8 @@ func (c *Client) doRequest(ctx context.Context, method, path string, params url.
 			continue
 		}
 
-		body, err := io.ReadAll(req.Body)
+		fmt.Println("doRequest")
+		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
 			lastErr = err
