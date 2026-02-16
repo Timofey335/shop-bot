@@ -17,7 +17,7 @@ type Client struct {
 
 func NewClient(baseURL string, timeout time.Duration) *Client {
 	if timeout == 0 {
-		timeout = 10 * time.Second
+		timeout = 100 * time.Second
 	}
 
 	return &Client{

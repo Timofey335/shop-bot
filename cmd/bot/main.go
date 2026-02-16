@@ -2,7 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -45,6 +49,41 @@ func main() {
 	for _, s := range shops {
 		log.Printf("  - %s (ID: %s)", s.Name, s.ID)
 	}
+
+	if len(shops) > 0 {
+		testShopID := shops[0].ID
+		log.Printf("Testing GetProducts for shop %s...", testShopID)
+
+		products, err := shopService.GetProducts(ctx, testShopID)
+		if err != nil {
+			log.Fatalf("Get products failed: %v", err)
+		}
+		log.Printf("Found %d products", len(products))
+
+		if len(products) > 0 {
+			log.Printf("First product: %s (в наличии: %d)",
+				products[0].Name, products[0].Availability)
+		}
+
+		log.Println("Testing searchProducts...")
+		searchResults, err := shopService.SearchProducts(ctx, testShopID, "молоко")
+		if err != nil {
+			log.Fatalf("searchProducts failed %v", err)
+		}
+
+		log.Printf("Found products %d", len(searchResults))
+
+		for _, i := range searchResults {
+			fmt.Println(i)
+		}
+	}
+
+	// Graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChan
+
+	log.Println("Shutting down...")
 
 	log.Println("Bot stopped")
 }

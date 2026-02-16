@@ -9,7 +9,7 @@ type productItem struct {
 }
 
 type productResponse struct {
-	ShopID   string        `json:"shop_id"`
+	ShopID   int           `json:"shop_id"`
 	Count    int           `json:"count"`
 	Products []productItem `json:"products"`
 }
