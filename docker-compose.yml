@@ -1,7 +1,6 @@
-version: '3.8'
-
 volumes:
   postgres_volume:
+  redis_data:
 
 services:
   postgres:
@@ -20,4 +19,26 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - bot-network
+  
+  redis:
+    image: redis:7.2.5-alpine3.20
+    container_name: shot-bot-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - bot-network
+
+networks:
+  bot-network:
+    driver: bridge
+
 
