@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-
 	"shop-bot/internal/domain"
 	"shop-bot/internal/transport/http"
 )
@@ -56,4 +55,19 @@ func (s *ShopService) SearchProducts(ctx context.Context, shopID, query string) 
 	}
 
 	return products, nil
+}
+
+func (s *ShopService) GetShopName(ctx context.Context, shopID string) (string, error) {
+	shops, err := s.GetShops(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	for _, shop := range shops {
+		if shop.ID == shopID {
+			return shop.Name, nil
+		}
+	}
+
+	return "", fmt.Errorf("shop not found: %s", shopID)
 }

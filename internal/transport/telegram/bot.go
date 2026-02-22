@@ -119,6 +119,8 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 	case strings.HasPrefix(text, "/setshop"):
 		args := strings.TrimSpace(strings.TrimPrefix(text, "/setshop"))
 		b.handleSetShop(ctx, userID, user, args)
+	case text == "/products":
+		b.handleProducts(ctx, userID, user)
 	default:
 		b.sendMessage(userID, "❓ Неизвестная команда. Используйте /start")
 	}
@@ -213,4 +215,56 @@ func (b *Bot) handleSetShop(ctx context.Context, userID int64, user *domain.User
 	user.SelectedShopID = args
 
 	b.sendMessage(userID, fmt.Sprintf("✅ Выбран магазин: <b>%s</b>\n\nТеперь доступны:\n/products — все товары\n/search — поиск", shopName))
+}
+
+// обрабатывает получение списка продуктов в магазине /products
+func (b *Bot) handleProducts(ctx context.Context, userID int64, user *domain.User) {
+	// проверка выбран ли магазин
+	if user.SelectedShopID == "" {
+		b.sendMessage(userID, "❌ Сначала выберите магазин: /shops")
+		return
+	}
+
+	shopName, err := b.shopService.GetShopName(ctx, user.SelectedShopID)
+	if err != nil {
+		shopName = user.SelectedShopID
+	}
+
+	// получаем товары
+	products, err := b.shopService.GetProducts(ctx, user.SelectedShopID)
+	if err != nil {
+		log.Printf("Error getting products: %v", err)
+		b.sendMessage(userID, "❌ Не удалось получить товары")
+		return
+	}
+
+	if len(products) == 0 {
+		b.sendMessage(userID, "📭 В магазине нет товаров")
+		return
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("📦 <b>Товары магазина %s</b>\n\n", shopName))
+
+	limit := 10
+	if len(products) < limit {
+		limit = len(products)
+	}
+
+	for i := 0; i < limit; i++ {
+		p := products[i]
+		stock := "❌ Нет"
+		if p.Availability > 0 {
+			stock = fmt.Sprintf("✅ %d шт.", p.Availability)
+		}
+		sb.WriteString(fmt.Sprintf("%d. <b>%s</b>\n   %s | <a href=\"%s\">Ссылка</a>\n\n",
+			i+1, p.Name, stock, p.URL))
+
+	}
+
+	if len(products) > 10 {
+		sb.WriteString(fmt.Sprintf("... и ещё %d товаров\n", len(products)-10))
+	}
+
+	b.sendMessage(userID, sb.String())
 }
