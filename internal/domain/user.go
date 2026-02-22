@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type User struct {
 	ID             int64
@@ -14,7 +17,7 @@ type User struct {
 }
 
 type UserRepository interface {
-	Create(user *User) error
-	GetByTelegramID(telegramID int64) (*User, error)
-	UpdateSelectedShop(telegramID int64, shopID string) error
+	Create(ctx context.Context, user *User) error
+	GetByTelegramID(ctx context.Context, telegramID int64) (*User, error)
+	UpdateSelectedShop(ctx context.Context, telegramID int64, shopID string) error
 }

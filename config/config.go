@@ -14,6 +14,9 @@ type Config struct {
 	DBPassword string
 	DBName     string
 
+	Environment string
+	LogLevel    string
+
 	PythonAPIURL string
 
 	CheckInterval int
@@ -28,6 +31,8 @@ func Load() (*Config, error) {
 		DBName:        getEnv("DB_NAME", "shopbot"),
 		PythonAPIURL:  getEnv("PYTHON_API_URL", "http://localhost:5000"),
 		CheckInterval: getEnvAsInt("CHECK_INTERVAL", 5),
+		Environment:   getEnv("ENVIRONMENT", "development"),
+		LogLevel:      getEnv("LOG_LEVEL", "info"),
 	}
 
 	cfg.TelegramToken = os.Getenv("TELEGRAM_TOKEN")

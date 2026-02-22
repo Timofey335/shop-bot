@@ -1,5 +1,7 @@
 package domain
 
+import "context"
+
 // Продукт из магазина
 // Получаем из python api
 type Product struct {
@@ -15,7 +17,7 @@ type Shop struct {
 }
 
 type ShopService interface {
-	GetShops() ([]Shop, error)
-	GetProducts(shopID string) ([]Product, error)
-	SearchProducts(shopID string, query string) ([]Product, error)
+	GetShops(ctx context.Context) ([]Shop, error)
+	GetProducts(ctx context.Context, shopID string) ([]Product, error)
+	SearchProducts(ctx context.Context, shopID string, query string) ([]Product, error)
 }
