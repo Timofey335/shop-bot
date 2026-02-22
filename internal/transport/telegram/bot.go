@@ -6,6 +6,7 @@ import (
 	"log"
 	"shop-bot/internal/domain"
 	"shop-bot/internal/repository"
+	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -113,6 +114,8 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 	switch text {
 	case "/start":
 		b.handleStart(userID, user)
+	case "/shops":
+		b.handleShops(ctx, userID)
 	default:
 		b.sendMessage(userID, "❓ Неизвестная команда. Используйте /start")
 	}
@@ -140,4 +143,30 @@ func (b *Bot) getOrCreateUser(ctx context.Context, from *tgbotapi.User) (*domain
 	}
 
 	return nil, err
+}
+
+// обработка команды /shops
+func (b *Bot) handleShops(ctx context.Context, userID int64) {
+	shops, err := b.shopService.GetShops(ctx)
+	if err != nil {
+		log.Printf("Error getting shops: %v", err)
+		b.sendMessage(userID, "❌ Не удалось получить список магазинов")
+		return
+	}
+
+	if len(shops) == 0 {
+		b.sendMessage(userID, "📭 Нет доступных магазинов")
+		return
+	}
+
+	var sb strings.Builder
+	sb.WriteString("🏪 <b>Доступные магазины:</b>\n\n")
+
+	for _, shop := range shops {
+		sb.WriteString(fmt.Sprintf("• <b>%s</b> (ID: <code>%s</code>)\n", shop.Name, shop.ID))
+	}
+
+	sb.WriteString("\nИспользуйте /setshop <i>ID</i> для выбора")
+
+	b.sendMessage(userID, sb.String())
 }
