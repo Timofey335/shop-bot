@@ -111,11 +111,14 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 		return
 	}
 
-	switch text {
-	case "/start":
+	switch {
+	case text == "/start":
 		b.handleStart(userID, user)
-	case "/shops":
+	case text == "/shops":
 		b.handleShops(ctx, userID)
+	case strings.HasPrefix(text, "/setshop"):
+		args := strings.TrimSpace(strings.TrimPrefix(text, "/setshop"))
+		b.handleSetShop(ctx, userID, user, args)
 	default:
 		b.sendMessage(userID, "❓ Неизвестная команда. Используйте /start")
 	}
@@ -169,4 +172,45 @@ func (b *Bot) handleShops(ctx context.Context, userID int64) {
 	sb.WriteString("\nИспользуйте /setshop <i>ID</i> для выбора")
 
 	b.sendMessage(userID, sb.String())
+}
+
+// обработка команды /setshop
+func (b *Bot) handleSetShop(ctx context.Context, userID int64, user *domain.User, args string) {
+	// если id не передан, то просим ввести
+	if args == "" {
+		b.sendMessage(userID, "Введите ID магазина:\n<code>/setshop 221918</code>")
+		return
+	}
+
+	shops, err := b.shopService.GetShops(ctx)
+	if err != nil {
+		log.Printf("Error validating shop: %v", err)
+		b.sendMessage(userID, "❌ Ошибка проверки магазина")
+		return
+	}
+
+	valid := false
+	var shopName string
+	for _, s := range shops {
+		if s.ID == args {
+			valid = true
+			shopName = s.Name
+			break
+		}
+	}
+
+	if !valid {
+		b.sendMessage(userID, "❌ Магазин не найден. Используйте /shops для списка.")
+		return
+	}
+
+	if err := b.userRepo.UpdateSelectedShop(ctx, user.TelegramID, args); err != nil {
+		log.Printf("error saving shop: %v", err)
+		b.sendMessage(userID, "❌ Не удалось сохранить выбор")
+		return
+	}
+
+	user.SelectedShopID = args
+
+	b.sendMessage(userID, fmt.Sprintf("✅ Выбран магазин: <b>%s</b>\n\nТеперь доступны:\n/products — все товары\n/search — поиск", shopName))
 }
