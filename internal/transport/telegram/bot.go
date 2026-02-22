@@ -94,6 +94,10 @@ func (b *Bot) sendMessage(chatID int64, text string) {
 }
 
 func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
+	if update.CallbackQuery != nil {
+		go b.handleCallback(ctx, update.CallbackQuery)
+		return
+	}
 	if update.Message == nil {
 		return
 	}
@@ -120,7 +124,7 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 		args := strings.TrimSpace(strings.TrimPrefix(text, "/setshop"))
 		b.handleSetShop(ctx, userID, user, args)
 	case text == "/products":
-		b.handleProducts(ctx, userID, user)
+		b.handleProducts(ctx, userID, user, 0)
 	default:
 		b.sendMessage(userID, "❓ Неизвестная команда. Используйте /start")
 	}
@@ -217,8 +221,10 @@ func (b *Bot) handleSetShop(ctx context.Context, userID int64, user *domain.User
 	b.sendMessage(userID, fmt.Sprintf("✅ Выбран магазин: <b>%s</b>\n\nТеперь доступны:\n/products — все товары\n/search — поиск", shopName))
 }
 
+const productsPerPage = 6
+
 // обрабатывает получение списка продуктов в магазине /products
-func (b *Bot) handleProducts(ctx context.Context, userID int64, user *domain.User) {
+func (b *Bot) handleProducts(ctx context.Context, userID int64, user *domain.User, page int) {
 	// проверка выбран ли магазин
 	if user.SelectedShopID == "" {
 		b.sendMessage(userID, "❌ Сначала выберите магазин: /shops")
@@ -243,28 +249,84 @@ func (b *Bot) handleProducts(ctx context.Context, userID int64, user *domain.Use
 		return
 	}
 
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("📦 <b>Товары магазина %s</b>\n\n", shopName))
-
-	limit := 10
-	if len(products) < limit {
-		limit = len(products)
+	totalPages := (len(products) + productsPerPage - 1) / productsPerPage
+	if page < 0 {
+		page = 0
 	}
 
-	for i := 0; i < limit; i++ {
+	if page >= totalPages {
+		page = totalPages - 1
+	}
+
+	start := page * productsPerPage
+	end := start + productsPerPage
+	if end > len(products) {
+		end = len(products)
+	}
+
+	var sb strings.Builder
+	// sb.WriteString(fmt.Sprintf("📦 <b>Товары магазина %s</b>\n\n", shopName))
+	sb.WriteString(fmt.Sprintf("📦 <b>%s</b> (страница %d/%d)\n\n", shopName, page+1, totalPages))
+
+	for i := start; i < end; i++ {
 		p := products[i]
+		num := i + 1
 		stock := "❌ Нет"
 		if p.Availability > 0 {
 			stock = fmt.Sprintf("✅ %d шт.", p.Availability)
 		}
 		sb.WriteString(fmt.Sprintf("%d. <b>%s</b>\n   %s | <a href=\"%s\">Ссылка</a>\n\n",
-			i+1, p.Name, stock, p.URL))
-
+			num, p.Name, stock, p.URL))
 	}
 
-	if len(products) > 10 {
-		sb.WriteString(fmt.Sprintf("... и ещё %d товаров\n", len(products)-10))
+	var keyboard [][]tgbotapi.InlineKeyboardButton
+	var row []tgbotapi.InlineKeyboardButton
+
+	if page > 0 {
+		row = append(row, tgbotapi.NewInlineKeyboardButtonData("◀️ Назад",
+			fmt.Sprintf("products:%d", page-1),
+		))
 	}
 
-	b.sendMessage(userID, sb.String())
+	if page < totalPages-1 {
+		row = append(row, tgbotapi.NewInlineKeyboardButtonData(
+			"Вперёд ▶️",
+			fmt.Sprintf("products:%d", page+1),
+		))
+	}
+
+	if len(row) > 0 {
+		keyboard = append(keyboard, row)
+	}
+
+	msg := tgbotapi.NewMessage(userID, sb.String())
+	msg.ParseMode = "HTML"
+	msg.DisableWebPagePreview = true
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(keyboard...)
+
+	if _, err := b.api.Send(msg); err != nil {
+		log.Printf("Error sending message: %v", err)
+	}
+}
+
+func (b *Bot) handleCallback(ctx context.Context, callback *tgbotapi.CallbackQuery) {
+	data := callback.Data
+	userID := callback.From.ID
+
+	if strings.HasPrefix(data, "products:") {
+		var page int
+		fmt.Sscanf(data, "products:%d", &page)
+
+		user, err := b.userRepo.GetByTelegramID(ctx, userID)
+		if err != nil {
+			b.api.Request(tgbotapi.NewCallback(callback.ID, "Ошибка"))
+			return
+		}
+
+		b.api.Request(tgbotapi.NewDeleteMessage(callback.Message.Chat.ID, callback.Message.MessageID))
+
+		b.handleProducts(ctx, userID, user, page)
+
+		b.api.Request(tgbotapi.NewCallback(callback.ID, ""))
+	}
 }
