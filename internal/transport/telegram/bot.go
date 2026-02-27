@@ -13,9 +13,10 @@ import (
 )
 
 type Bot struct {
-	api         *tgbotapi.BotAPI
-	userRepo    domain.UserRepository
-	shopService domain.ShopService
+	api             *tgbotapi.BotAPI
+	userRepo        domain.UserRepository
+	shopService     domain.ShopService
+	trackingService domain.TrackingService
 }
 
 // type UserState struct {
@@ -23,7 +24,7 @@ type Bot struct {
 // 	ShopID string
 // }
 
-func NewBot(token string, userRepo domain.UserRepository, shopService domain.ShopService) (*Bot, error) {
+func NewBot(token string, userRepo domain.UserRepository, shopService domain.ShopService, trackingService domain.TrackingService) (*Bot, error) {
 	api, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bot: %w", err)
@@ -34,9 +35,10 @@ func NewBot(token string, userRepo domain.UserRepository, shopService domain.Sho
 	log.Printf("Authorized on account %s", api.Self.UserName)
 
 	return &Bot{
-		api:         api,
-		userRepo:    userRepo,
-		shopService: shopService,
+		api:             api,
+		userRepo:        userRepo,
+		shopService:     shopService,
+		trackingService: trackingService,
 	}, nil
 }
 
@@ -129,6 +131,9 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 	case strings.HasPrefix(text, "/search"):
 		args := strings.TrimSpace(strings.TrimPrefix(text, "/search"))
 		b.handleSearch(ctx, userID, user, args)
+	case strings.HasPrefix(text, "/track"):
+		args := strings.TrimSpace(strings.TrimPrefix(text, "/track"))
+		b.handleTrack(ctx, userID, user, args)
 	default:
 		b.sendMessage(userID, "❓ Неизвестная команда. Используйте /start")
 	}
@@ -375,4 +380,45 @@ func (b *Bot) handleSearch(ctx context.Context, userID int64, user *domain.User,
 	}
 
 	b.sendMessage(userID, sb.String())
+}
+
+func (b *Bot) handleTrack(ctx context.Context, userID int64, user *domain.User, query string) {
+	log.Printf("User ID: %d, TelegramID: %d", user.ID, user.TelegramID)
+	// Проверяем, выбран ли магазин
+	if user.SelectedShopID == "" {
+		b.sendMessage(userID, "❌ Сначала выберите магазин: /shops")
+		return
+	}
+
+	// Проверка на пустой запрос
+	if query == "" {
+		b.sendMessage(userID, "Введите название товара для отслеживания:\n<code>/track молоко 3.2</code>")
+		return
+	}
+
+	if len(query) < 2 {
+		b.sendMessage(userID, "❌ Запрос слишком короткий (минимум 2 символа)")
+		return
+	}
+
+	task, err := b.trackingService.CreateTask(ctx, user.ID, user.SelectedShopID, query)
+	if err != nil {
+		log.Printf("failed to create tracking task: %v", err)
+		b.sendMessage(userID, "❌ Не удалось создать задачу отслеживания")
+		return
+	}
+
+	var targetInfo string
+	if task.TargetName != "" {
+		targetInfo = fmt.Sprintf("\n\nНайден товар: <b>%s</b>", task.TargetName)
+	}
+
+	b.sendMessage(userID, fmt.Sprintf(
+		"✅ Задача отслеживания создана!\n\n"+
+			"🔍 Ищем: <b>%s</b>\n"+
+			"🏪 Магазин: %s\n"+
+			"📋 ID задачи: <code>%d</code>%s\n\n"+
+			"Когда товар появится в наличии — пришлю уведомление.",
+		task.Query, task.ShopID, task.ID, targetInfo,
+	))
 }

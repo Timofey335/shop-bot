@@ -20,7 +20,7 @@ func NewTrackingRepo(pool *pgxpool.Pool) *TrackingRepo {
 
 func (r *TrackingRepo) Create(ctx context.Context, task *domain.TrackingTask) error {
 	query := `
-	INSERT INTO tracking_task (user_id, shop_id, query, target_name, status)
+	INSERT INTO tracking_tasks (user_id, shop_id, query, target_name, status)
 	VALUES ($1, $2, $3, $4, $5)
 	RETURNING id, created_at, updated_at
 	`

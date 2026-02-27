@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type TrackingStatus string
 
@@ -23,13 +26,17 @@ type TrackingTask struct {
 }
 
 type TrackingRepository interface {
-	Create(task *TrackingTask) error
+	Create(ctx context.Context, task *TrackingTask) error
 	// Возвращает активные задачи пользователя
-	GetActiveByUser(userID int64) ([]TrackingTask, error)
+	GetActiveByUser(ctx context.Context, userID int64) ([]TrackingTask, error)
 	// Возвращает все задачи для воркера
 	// Он будет проходить по ним и проверять наличие товаров
-	GetAllActive() ([]TrackingTask, error)
+	GetAllActive(ctx context.Context) ([]TrackingTask, error)
 	// Меняет статус задачи
-	UpdateStatus(taskID int64, status TrackingStatus) error
-	Delete(taskID int64) error
+	UpdateStatus(ctx context.Context, taskID int64, status TrackingStatus) error
+	Delete(ctx context.Context, taskID int64) error
+}
+
+type TrackingService interface {
+	CreateTask(ctx context.Context, userID int64, shopID, query string) (*TrackingTask, error)
 }

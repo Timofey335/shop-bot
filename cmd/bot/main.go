@@ -6,13 +6,14 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"syscall"
+
+	"github.com/joho/godotenv"
+
 	"shop-bot/config"
 	"shop-bot/internal/repository/postgres"
 	"shop-bot/internal/service"
 	"shop-bot/internal/transport/telegram"
-	"syscall"
-
-	"github.com/joho/godotenv"
 )
 
 func main() {
@@ -34,10 +35,15 @@ func main() {
 	log.Printf("Connected to PostgreSQL")
 
 	userRepo := postgres.NewUserRepo(pool)
+	trackingRepo := postgres.NewTrackingRepo(pool)
 
 	shopService := service.NewShopService(cfg.PythonAPIURL)
+	trackingService := service.NewTrackingService(trackingRepo, shopService)
 
-	bot, err := telegram.NewBot(cfg.TelegramToken, userRepo, shopService)
+	bot, err := telegram.NewBot(cfg.TelegramToken, userRepo, shopService, trackingService)
+	if err != nil {
+		log.Fatalf("Failed to create bot: %v", err)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
