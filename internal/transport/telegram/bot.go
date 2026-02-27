@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"shop-bot/internal/domain"
-	"shop-bot/internal/repository"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+
+	"shop-bot/internal/domain"
+	"shop-bot/internal/repository"
 )
 
 type Bot struct {
@@ -125,6 +126,9 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 		b.handleSetShop(ctx, userID, user, args)
 	case text == "/products":
 		b.handleProducts(ctx, userID, user, 0)
+	case strings.HasPrefix(text, "/search"):
+		args := strings.TrimSpace(strings.TrimPrefix(text, "/search"))
+		b.handleSearch(ctx, userID, user, args)
 	default:
 		b.sendMessage(userID, "❓ Неизвестная команда. Используйте /start")
 	}
@@ -329,4 +333,46 @@ func (b *Bot) handleCallback(ctx context.Context, callback *tgbotapi.CallbackQue
 
 		b.api.Request(tgbotapi.NewCallback(callback.ID, ""))
 	}
+}
+
+// handleSearch обрабатывает команду /search
+func (b *Bot) handleSearch(ctx context.Context, userID int64, user *domain.User, query string) {
+	if user.SelectedShopID == "" {
+		b.sendMessage(userID, "❌ Сначала выберите магазин: /shops")
+		return
+	}
+
+	if query == "" {
+		b.sendMessage(userID, "Введите название товара для поиска:\n<code>/search молоко</code>")
+	}
+
+	if len(query) < 2 {
+		b.sendMessage(userID, "❌ Запрос слишком короткий (минимум 2 символа)")
+		return
+	}
+
+	products, err := b.shopService.SearchProducts(ctx, user.SelectedShopID, query)
+	if err != nil {
+		log.Printf("Error searching products: %v", err)
+		b.sendMessage(userID, "❌ Ошибка поиска")
+		return
+	}
+
+	if len(products) == 0 {
+		b.sendMessage(userID, fmt.Sprintf("🔍 По запросу <b>%s</b> ничего не найдено", query))
+		return
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("🔍 <b>Результаты поиска \"%s\"</b>\n\n", query))
+
+	for i, p := range products {
+		stock := "❌ Нет"
+		if p.Availability > 0 {
+			stock = fmt.Sprintf("✅ %d шт.", p.Availability)
+		}
+		sb.WriteString(fmt.Sprintf("%d. <b>%s</b>\n   %s | <a href=\"%s\">Ссылка</a>\n\n", i+1, p.Name, stock, p.URL))
+	}
+
+	b.sendMessage(userID, sb.String())
 }
