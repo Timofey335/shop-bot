@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"shop-bot/internal/domain"
 	"time"
 )
@@ -17,15 +18,17 @@ type Tracker struct {
 	userRepo    domain.UserRepository
 	shopService domain.ShopService
 	notifier    Notifier
+	logger      *slog.Logger
 	interval    time.Duration
 }
 
-func NewTracker(svc domain.TrackingService, users domain.UserRepository, shopService domain.ShopService, notifier Notifier, interval time.Duration) *Tracker {
+func NewTracker(svc domain.TrackingService, users domain.UserRepository, shopService domain.ShopService, logger *slog.Logger, notifier Notifier, interval time.Duration) *Tracker {
 	return &Tracker{
 		trackingSvc: svc,
 		userRepo:    users,
 		shopService: shopService,
 		notifier:    notifier,
+		logger:      logger,
 		interval:    interval,
 	}
 }
@@ -34,14 +37,14 @@ func (t *Tracker) Start(ctx context.Context) {
 	ticker := time.NewTicker(t.interval)
 	defer ticker.Stop()
 
-	log.Println("Tracking worker started")
+	t.logger.Info("Tracking worker started")
 
 	t.checkAll(ctx)
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Trackinf worker stopped")
+			t.logger.Info("Tracking worker stopped")
 			return
 		case <-ticker.C:
 			t.checkAll(ctx)
@@ -50,15 +53,15 @@ func (t *Tracker) Start(ctx context.Context) {
 }
 
 func (t *Tracker) checkAll(ctx context.Context) {
-	log.Println("Checking tracking tasks...")
+	t.logger.Info("Checking tracking tasks...")
 
 	tasks, err := t.trackingSvc.GetActiveTasks(ctx)
 	if err != nil {
-		log.Printf("Error getting tasks: %v", err)
+		t.logger.Error("error getting tasks")
 		return
 	}
 
-	log.Printf("Found %d active tasks", len(tasks))
+	t.logger.Info("Found active tasks", "num of tasks", len(tasks))
 
 	for _, task := range tasks {
 		taskCtx, cancel := context.WithTimeout(ctx, 100*time.Second)
@@ -67,7 +70,10 @@ func (t *Tracker) checkAll(ctx context.Context) {
 		cancel()
 
 		if err != nil {
-			log.Printf("Error checking task %d: %v", task.ID, err)
+			t.logger.Error("error checking task",
+				"task_id", task.ID,
+				"error", err,
+			)
 			continue
 		}
 
@@ -80,7 +86,10 @@ func (t *Tracker) checkAll(ctx context.Context) {
 func (t *Tracker) notify(ctx context.Context, task *domain.TrackingTask) {
 	user, err := t.userRepo.GetByID(ctx, task.UserID)
 	if err != nil {
-		log.Printf("Error getting user %d: %v", task.UserID, err)
+		t.logger.Error("error getting user",
+			"user ID", task.UserID,
+			"error", err,
+		)
 		return
 	}
 
@@ -98,14 +107,18 @@ func (t *Tracker) notify(ctx context.Context, task *domain.TrackingTask) {
 	)
 
 	if err := t.notifier.SendNotification(user.TelegramID, text); err != nil {
-		log.Printf("Error sending notification: %v", err)
+		t.logger.Error("failed to send notification", "error", err)
 		return
 	}
 
 	if err := t.trackingSvc.MarkDone(ctx, task.ID); err != nil {
-		log.Printf("Error marking task done: %v", err)
+		t.logger.Error("failed to mark task done", "error", err)
 		return
 	}
 
 	log.Printf("Task %d completed, user notified", task.ID)
+	t.logger.Info("task complited, user notified",
+		"task_id", task.ID,
+		"user_id", user.TelegramID,
+	)
 }

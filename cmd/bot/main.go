@@ -27,13 +27,18 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
+	logger := newLogger(cfg.LogLevel, cfg.Environment)
+	logger.Info("starting application",
+		"environment", cfg.Environment,
+		"log_level", cfg.LogLevel)
+
 	pool, err := postgres.New(cfg.PostgreSQLConnectionString())
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer pool.Close()
 
-	log.Printf("Connected to PostgreSQL")
+	logger.Info("Connected to PostgreSQL")
 
 	userRepo := postgres.NewUserRepo(pool)
 	trackingRepo := postgres.NewTrackingRepo(pool)
@@ -41,7 +46,7 @@ func main() {
 	shopService := service.NewShopService(cfg.PythonAPIURL)
 	trackingService := service.NewTrackingService(trackingRepo, shopService)
 
-	bot, err := telegram.NewBot(cfg.TelegramToken, userRepo, shopService, trackingService)
+	bot, err := telegram.NewBot(cfg.TelegramToken, logger, userRepo, shopService, trackingService)
 	if err != nil {
 		log.Fatalf("Failed to create bot: %v", err)
 	}
@@ -51,19 +56,19 @@ func main() {
 
 	go bot.Start(ctx)
 
-	tracker := worker.NewTracker(trackingService, userRepo, shopService, bot, 1*time.Minute)
+	tracker := worker.NewTracker(trackingService, userRepo, shopService, logger, bot, 1*time.Minute)
 	go tracker.Start(ctx)
 
-	log.Println("Bot started. Press Ctrl+C to stop.")
+	logger.Info("Bot started")
 
 	// Graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 
-	log.Println("Shutting down...")
+	logger.Info("Shutting down...")
 
-	log.Println("Bot stopped")
+	logger.Info("Bot stopped")
 }
 
 func newLogger(level, env string) *slog.Logger {

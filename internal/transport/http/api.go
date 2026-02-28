@@ -5,13 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-
 	"shop-bot/internal/domain"
 )
 
 // Получить список доступных магазинов
 func (c *Client) GetShops(ctx context.Context) ([]domain.Shop, error) {
-	// fmt.Println("http.getshops")
 	body, err := c.doRequest(ctx, "GET", "/shops", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shops: %w", err)

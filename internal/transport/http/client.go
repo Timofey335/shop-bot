@@ -65,7 +65,6 @@ func (c *Client) doRequest(ctx context.Context, method, path string, params url.
 			continue
 		}
 
-		fmt.Println("doRequest")
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {

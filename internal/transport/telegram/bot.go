@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"shop-bot/internal/domain"
 	"shop-bot/internal/repository"
 	"strings"
@@ -13,6 +14,7 @@ import (
 
 type Bot struct {
 	api             *tgbotapi.BotAPI
+	logger          *slog.Logger
 	userRepo        domain.UserRepository
 	shopService     domain.ShopService
 	trackingService domain.TrackingService
@@ -23,7 +25,7 @@ type Bot struct {
 // 	ShopID string
 // }
 
-func NewBot(token string, userRepo domain.UserRepository, shopService domain.ShopService, trackingService domain.TrackingService) (*Bot, error) {
+func NewBot(token string, logger *slog.Logger, userRepo domain.UserRepository, shopService domain.ShopService, trackingService domain.TrackingService) (*Bot, error) {
 	api, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bot: %w", err)
@@ -31,10 +33,11 @@ func NewBot(token string, userRepo domain.UserRepository, shopService domain.Sho
 
 	api.Debug = false
 
-	log.Printf("Authorized on account %s", api.Self.UserName)
+	logger.Info("Authorized on account", "account_name", api.Self.UserName)
 
 	return &Bot{
 		api:             api,
+		logger:          logger,
 		userRepo:        userRepo,
 		shopService:     shopService,
 		trackingService: trackingService,
@@ -47,19 +50,16 @@ func (b *Bot) Start(ctx context.Context) {
 
 	updates := b.api.GetUpdatesChan(u)
 
-	log.Println("Bot started, waiting for messages...")
+	b.logger.Info("Bot started, waiting for messages")
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Stopping bot...")
+			b.logger.Info("Stopping bot")
 			b.api.StopReceivingUpdates()
 			return
 
 		case update := <-updates:
-			// if update.Message != nil {
-			// 	log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
-			// }
 			go b.handleUpdate(ctx, update)
 		}
 	}
@@ -108,11 +108,16 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 	userID := msg.From.ID
 	text := msg.Text
 
-	log.Printf("[%s] %s", msg.From.UserName, text)
+	b.logger.Debug("message received",
+		"user_id", msg.From.ID,
+		"username", msg.From.UserName,
+		"text", msg.Text,
+	)
 
 	user, err := b.getOrCreateUser(ctx, msg.From)
 	if err != nil {
-		log.Printf("Error getting/creating user: %v", err)
+		b.logger.Error("Error getting/creating user",
+			"error", err)
 		b.sendMessage(userID, "❌ Ошибка. Попробуйте позже.")
 		return
 	}
@@ -166,7 +171,8 @@ func (b *Bot) getOrCreateUser(ctx context.Context, from *tgbotapi.User) (*domain
 func (b *Bot) handleShops(ctx context.Context, userID int64) {
 	shops, err := b.shopService.GetShops(ctx)
 	if err != nil {
-		log.Printf("Error getting shops: %v", err)
+		b.logger.Error("Error getting shops",
+			"error", err)
 		b.sendMessage(userID, "❌ Не удалось получить список магазинов")
 		return
 	}
@@ -198,7 +204,8 @@ func (b *Bot) handleSetShop(ctx context.Context, userID int64, user *domain.User
 
 	shops, err := b.shopService.GetShops(ctx)
 	if err != nil {
-		log.Printf("Error validating shop: %v", err)
+		b.logger.Error("Error validating shop",
+			"error", err)
 		b.sendMessage(userID, "❌ Ошибка проверки магазина")
 		return
 	}
@@ -219,7 +226,8 @@ func (b *Bot) handleSetShop(ctx context.Context, userID int64, user *domain.User
 	}
 
 	if err := b.userRepo.UpdateSelectedShop(ctx, user.TelegramID, args); err != nil {
-		log.Printf("error saving shop: %v", err)
+		b.logger.Error("Error saving shop",
+			"error", err)
 		b.sendMessage(userID, "❌ Не удалось сохранить выбор")
 		return
 	}
@@ -247,7 +255,8 @@ func (b *Bot) handleProducts(ctx context.Context, userID int64, user *domain.Use
 	// получаем товары
 	products, err := b.shopService.GetProducts(ctx, user.SelectedShopID)
 	if err != nil {
-		log.Printf("Error getting products: %v", err)
+		b.logger.Error("Error getting products",
+			"error", err)
 		b.sendMessage(userID, "❌ Не удалось получить товары")
 		return
 	}
@@ -382,7 +391,7 @@ func (b *Bot) handleSearch(ctx context.Context, userID int64, user *domain.User,
 }
 
 func (b *Bot) handleTrack(ctx context.Context, userID int64, user *domain.User, query string) {
-	log.Printf("User ID: %d, TelegramID: %d", user.ID, user.TelegramID)
+	b.logger.Debug("handleTrack", "User ID", user.ID, "Telegram ID", user.TelegramID)
 	// Проверяем, выбран ли магазин
 	if user.SelectedShopID == "" {
 		b.sendMessage(userID, "❌ Сначала выберите магазин: /shops")
@@ -407,7 +416,10 @@ func (b *Bot) handleTrack(ctx context.Context, userID int64, user *domain.User, 
 
 	task, err := b.trackingService.CreateTask(ctx, user.ID, user.SelectedShopID, query)
 	if err != nil {
-		log.Printf("failed to create tracking task: %v", err)
+		b.logger.Error("failed to create tracking task",
+			"error", err,
+			"user_id", userID,
+			"query", query)
 		b.sendMessage(userID, "❌ Не удалось создать задачу отслеживания")
 		return
 	}
