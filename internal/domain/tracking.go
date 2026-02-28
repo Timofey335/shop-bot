@@ -39,4 +39,7 @@ type TrackingRepository interface {
 
 type TrackingService interface {
 	CreateTask(ctx context.Context, userID int64, shopID, query string) (*TrackingTask, error)
+	GetActiveTasks(ctx context.Context) ([]TrackingTask, error)
+	CheckTask(ctx context.Context, task *TrackingTask) (bool, error)
+	MarkDone(ctx context.Context, taskID int64) error
 }

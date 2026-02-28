@@ -4,13 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"shop-bot/internal/domain"
+	"shop-bot/internal/repository"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"shop-bot/internal/domain"
-	"shop-bot/internal/repository"
 )
 
 type UserRepo struct {
@@ -102,4 +101,29 @@ func isDuplicateError(err error) bool {
 
 	return strings.Contains(err.Error(), "unique constraint") ||
 		strings.Contains(err.Error(), "duplicate key")
+}
+
+func (r *UserRepo) GetByID(ctx context.Context, id int64) (*domain.User, error) {
+	query := `
+		SELECT id, telegram_id, username, first_name, last_name,
+		selected_shop_id, created_at, updated_at
+		FROM users
+		WHERE id = $1
+	`
+
+	user := &domain.User{}
+	err := r.pool.QueryRow(ctx, query, id).Scan(
+		&user.ID, &user.TelegramID, &user.Username, &user.FirstName,
+		&user.LastName, &user.SelectedShopID,
+		&user.CreatedAt, &user.UpdateAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, repository.ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to get user by id: %w", err)
+	}
+
+	return user, nil
 }

@@ -20,4 +20,5 @@ type UserRepository interface {
 	Create(ctx context.Context, user *User) error
 	GetByTelegramID(ctx context.Context, telegramID int64) (*User, error)
 	UpdateSelectedShop(ctx context.Context, telegramID int64, shopID string) error
+	GetByID(ctx context.Context, id int64) (*User, error)
 }

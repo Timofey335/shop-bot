@@ -4,12 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"shop-bot/internal/domain"
+	"shop-bot/internal/repository"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-
-	"shop-bot/internal/domain"
-	"shop-bot/internal/repository"
 )
 
 type Bot struct {
@@ -390,6 +389,11 @@ func (b *Bot) handleTrack(ctx context.Context, userID int64, user *domain.User, 
 		return
 	}
 
+	shopName, err := b.shopService.GetShopName(ctx, user.SelectedShopID)
+	if err != nil {
+		shopName = user.SelectedShopID
+	}
+
 	// Проверка на пустой запрос
 	if query == "" {
 		b.sendMessage(userID, "Введите название товара для отслеживания:\n<code>/track молоко 3.2</code>")
@@ -416,9 +420,13 @@ func (b *Bot) handleTrack(ctx context.Context, userID int64, user *domain.User, 
 	b.sendMessage(userID, fmt.Sprintf(
 		"✅ Задача отслеживания создана!\n\n"+
 			"🔍 Ищем: <b>%s</b>\n"+
-			"🏪 Магазин: %s\n"+
-			"📋 ID задачи: <code>%d</code>%s\n\n"+
+			"🏪 Магазин: %s\n"+"%s\n\n"+
 			"Когда товар появится в наличии — пришлю уведомление.",
-		task.Query, task.ShopID, task.ID, targetInfo,
+		task.Query, shopName, targetInfo,
 	))
+}
+
+func (b *Bot) SendNotification(userID int64, text string) error {
+	b.sendMessage(userID, text)
+	return nil
 }

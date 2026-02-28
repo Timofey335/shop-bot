@@ -3,11 +3,10 @@ package postgres
 import (
 	"context"
 	"fmt"
-
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"shop-bot/internal/domain"
 	"shop-bot/internal/repository"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type TrackingRepo struct {
@@ -41,7 +40,7 @@ func (r *TrackingRepo) Create(ctx context.Context, task *domain.TrackingTask) er
 func (r *TrackingRepo) GetActiveByUser(ctx context.Context, userID int64) ([]domain.TrackingTask, error) {
 	query := `
 	SELECT id, user_id, shop_id, query, target_name, status, created_at, updated_at, notified_at
-	FROM tracking_task
+	FROM tracking_tasks
 	WHERE user_id = $1 AND satus = 'active'
 	ORDER BY created_at DESC
 	`
@@ -76,7 +75,7 @@ func (r *TrackingRepo) GetActiveByUser(ctx context.Context, userID int64) ([]dom
 func (r *TrackingRepo) GetAllActive(ctx context.Context) ([]domain.TrackingTask, error) {
 	query := `
 	SELECT id, user_id, shop_id, query, target_name, status, created_at, updated_at, notified_at
-	FROM traking_tasks
+	FROM tracking_tasks
 	WHERE status = 'active'
 	ORDER BY id ASC
 	`

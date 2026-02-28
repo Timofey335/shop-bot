@@ -6,14 +6,15 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"syscall"
-
-	"github.com/joho/godotenv"
-
 	"shop-bot/config"
 	"shop-bot/internal/repository/postgres"
 	"shop-bot/internal/service"
 	"shop-bot/internal/transport/telegram"
+	"shop-bot/internal/worker"
+	"syscall"
+	"time"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
@@ -49,6 +50,9 @@ func main() {
 	defer cancel()
 
 	go bot.Start(ctx)
+
+	tracker := worker.NewTracker(trackingService, userRepo, shopService, bot, 1*time.Minute)
+	go tracker.Start(ctx)
 
 	log.Println("Bot started. Press Ctrl+C to stop.")
 
