@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"shop-bot/config"
 	"shop-bot/internal/repository/postgres"
+	"shop-bot/internal/repository/redis"
 	"shop-bot/internal/service"
 	"shop-bot/internal/transport/telegram"
 	"shop-bot/internal/worker"
@@ -40,13 +41,21 @@ func main() {
 
 	logger.Info("Connected to PostgreSQL")
 
+	stateMgr, err := redis.NewStateManager(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
+	if err != nil {
+		logger.Error("failed to connect to redis", "error", err)
+		os.Exit(1)
+	}
+	defer stateMgr.Close()
+	logger.Info("connected to redis")
+
 	userRepo := postgres.NewUserRepo(pool)
 	trackingRepo := postgres.NewTrackingRepo(pool)
 
 	shopService := service.NewShopService(cfg.PythonAPIURL)
 	trackingService := service.NewTrackingService(trackingRepo, shopService)
 
-	bot, err := telegram.NewBot(cfg.TelegramToken, logger, userRepo, shopService, trackingService)
+	bot, err := telegram.NewBot(cfg.TelegramToken, logger, userRepo, shopService, trackingService, stateMgr)
 	if err != nil {
 		log.Fatalf("Failed to create bot: %v", err)
 	}

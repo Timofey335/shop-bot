@@ -12,6 +12,7 @@ get-deps:
 	go get github.com/jackc/pgx/v5/pgxpool
 	go get github.com/google/uuid
 	go get github.com/go-telegram-bot-api/telegram-bot-api/v5
+	go get github.com/redis/go-redis/v9
 
 migration-up:
 	${LOCAL_BIN}/migrate -path ${MIGRATION_DIR} -database ${LOCAL_MIGRATION_DB} up

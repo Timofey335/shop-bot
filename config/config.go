@@ -19,6 +19,10 @@ type Config struct {
 
 	PythonAPIURL string
 
+	RedisAddr     string
+	RedisPassword string
+	RedisDB       int
+
 	CheckInterval int
 }
 
@@ -33,6 +37,9 @@ func Load() (*Config, error) {
 		CheckInterval: getEnvAsInt("CHECK_INTERVAL", 5),
 		Environment:   getEnv("ENVIRONMENT", "development"),
 		LogLevel:      getEnv("LOG_LEVEL", "info"),
+		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword: getEnv("REDIS_PASSWORD", ""),
+		RedisDB:       getEnvAsInt("REDIS_DB", 0),
 	}
 
 	cfg.TelegramToken = os.Getenv("TELEGRAM_TOKEN")

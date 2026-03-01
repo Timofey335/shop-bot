@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"shop-bot/internal/domain"
 	"shop-bot/internal/repository"
+	"shop-bot/internal/repository/redis"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -18,6 +19,7 @@ type Bot struct {
 	userRepo        domain.UserRepository
 	shopService     domain.ShopService
 	trackingService domain.TrackingService
+	stateMgr        *redis.StateManager
 }
 
 // type UserState struct {
@@ -25,7 +27,13 @@ type Bot struct {
 // 	ShopID string
 // }
 
-func NewBot(token string, logger *slog.Logger, userRepo domain.UserRepository, shopService domain.ShopService, trackingService domain.TrackingService) (*Bot, error) {
+func NewBot(token string,
+	logger *slog.Logger,
+	userRepo domain.UserRepository,
+	shopService domain.ShopService,
+	trackingService domain.TrackingService,
+	stateMgr *redis.StateManager,
+) (*Bot, error) {
 	api, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bot: %w", err)
@@ -41,6 +49,7 @@ func NewBot(token string, logger *slog.Logger, userRepo domain.UserRepository, s
 		userRepo:        userRepo,
 		shopService:     shopService,
 		trackingService: trackingService,
+		stateMgr:        stateMgr,
 	}, nil
 }
 
@@ -108,12 +117,6 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 	userID := msg.From.ID
 	text := msg.Text
 
-	b.logger.Debug("message received",
-		"user_id", msg.From.ID,
-		"username", msg.From.UserName,
-		"text", msg.Text,
-	)
-
 	user, err := b.getOrCreateUser(ctx, msg.From)
 	if err != nil {
 		b.logger.Error("Error getting/creating user",
@@ -121,6 +124,34 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 		b.sendMessage(userID, "❌ Ошибка. Попробуйте позже.")
 		return
 	}
+
+	b.logger.Debug("message received",
+		"user_id", msg.From.ID,
+		"username", msg.From.UserName,
+		"text", msg.Text,
+	)
+
+	state, err := b.stateMgr.GetState(ctx, userID)
+	if err != nil {
+		b.logger.Error("failed to get state", "error", err)
+		state = &redis.UserState{Step: "idle"}
+	}
+
+	if state.Step != "idle" && !msg.IsCommand() {
+		b.handleStateInput(ctx, userID, state, text)
+		return
+	}
+
+	if state.Step != "idle" && !msg.IsCommand() {
+		log.Println("clear")
+		b.stateMgr.ClearState(ctx, userID)
+	}
+
+	b.logger.Info("debug state",
+		"step", state.Step,
+		"is_command", msg.IsCommand(),
+		"text", text,
+	)
 
 	switch {
 	case text == "/start":
@@ -140,6 +171,13 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 		b.handleTrack(ctx, userID, user, args)
 	default:
 		b.sendMessage(userID, "❓ Неизвестная команда. Используйте /start")
+	}
+}
+
+func (b *Bot) handleStateInput(ctx context.Context, userID int64, state *redis.UserState, text string) {
+	switch state.Step {
+	case "waiting_shop":
+		b.handleShopInput(ctx, userID, text)
 	}
 }
 
@@ -194,13 +232,21 @@ func (b *Bot) handleShops(ctx context.Context, userID int64) {
 	b.sendMessage(userID, sb.String())
 }
 
-// обработка команды /setshop
-func (b *Bot) handleSetShop(ctx context.Context, userID int64, user *domain.User, args string) {
-	// если id не передан, то просим ввести
-	if args == "" {
-		b.sendMessage(userID, "Введите ID магазина:\n<code>/setshop 221918</code>")
+func (b *Bot) handleShopInput(ctx context.Context, userID int64, shopID string) {
+	b.stateMgr.ClearState(ctx, userID)
+
+	user, err := b.userRepo.GetByTelegramID(ctx, userID)
+	if err != nil {
+		b.logger.Error("failed to get user", "error", err)
+		b.sendMessage(userID, "❌ Ошибка. Попробуйте /setshop снова.")
 		return
 	}
+
+	b.setShop(ctx, userID, user, shopID)
+}
+
+// обработка команды /setshop
+func (b *Bot) setShop(ctx context.Context, userID int64, user *domain.User, args string) {
 
 	shops, err := b.shopService.GetShops(ctx)
 	if err != nil {
@@ -235,6 +281,19 @@ func (b *Bot) handleSetShop(ctx context.Context, userID int64, user *domain.User
 	user.SelectedShopID = args
 
 	b.sendMessage(userID, fmt.Sprintf("✅ Выбран магазин: <b>%s</b>\n\nТеперь доступны:\n/products — все товары\n/search — поиск", shopName))
+}
+
+func (b *Bot) handleSetShop(ctx context.Context, userID int64, user *domain.User, args string) {
+	if args != "" {
+		b.setShop(ctx, userID, user, args)
+		return
+	}
+
+	b.stateMgr.SetState(ctx, userID, &redis.UserState{
+		Step: "waiting_shop",
+	})
+
+	b.sendMessage(userID, "Введите ID магазина:\n\nИли используйте /shops для списка")
 }
 
 const productsPerPage = 6
