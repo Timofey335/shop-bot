@@ -22,11 +22,6 @@ type Bot struct {
 	stateMgr        *redis.StateManager
 }
 
-// type UserState struct {
-// 	Step   string
-// 	ShopID string
-// }
-
 func NewBot(token string,
 	logger *slog.Logger,
 	userRepo domain.UserRepository,
@@ -138,7 +133,7 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 	}
 
 	if state.Step != "idle" && !msg.IsCommand() {
-		b.handleStateInput(ctx, userID, state, text)
+		b.handleStateInput(ctx, user, state, text)
 		return
 	}
 
@@ -174,10 +169,12 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 	}
 }
 
-func (b *Bot) handleStateInput(ctx context.Context, userID int64, state *redis.UserState, text string) {
+func (b *Bot) handleStateInput(ctx context.Context, user *domain.User, state *redis.UserState, text string) {
 	switch state.Step {
 	case "waiting_shop":
-		b.handleShopInput(ctx, userID, text)
+		b.handleShopInput(ctx, user.TelegramID, text)
+	case "waiting_search":
+		b.handleSearchInput(ctx, user, text)
 	}
 }
 
@@ -247,7 +244,6 @@ func (b *Bot) handleShopInput(ctx context.Context, userID int64, shopID string) 
 
 // обработка команды /setshop
 func (b *Bot) setShop(ctx context.Context, userID int64, user *domain.User, args string) {
-
 	shops, err := b.shopService.GetShops(ctx)
 	if err != nil {
 		b.logger.Error("Error validating shop",
@@ -407,7 +403,6 @@ func (b *Bot) handleCallback(ctx context.Context, callback *tgbotapi.CallbackQue
 	}
 }
 
-// handleSearch обрабатывает команду /search
 func (b *Bot) handleSearch(ctx context.Context, userID int64, user *domain.User, query string) {
 	if user.SelectedShopID == "" {
 		b.sendMessage(userID, "❌ Сначала выберите магазин: /shops")
@@ -415,23 +410,38 @@ func (b *Bot) handleSearch(ctx context.Context, userID int64, user *domain.User,
 	}
 
 	if query == "" {
-		b.sendMessage(userID, "Введите название товара для поиска:\n<code>/search молоко</code>")
+		b.stateMgr.SetState(ctx, userID, &redis.UserState{
+			Step: "waiting_search",
+		})
+
+		b.sendMessage(userID, "Введите название товара для поиска:")
+		return
 	}
 
+	b.productSearch(ctx, user, query)
+}
+
+func (b *Bot) handleSearchInput(ctx context.Context, user *domain.User, query string) {
+	b.stateMgr.ClearState(ctx, user.TelegramID)
+
+	b.productSearch(ctx, user, query)
+}
+
+func (b *Bot) productSearch(ctx context.Context, user *domain.User, query string) {
 	if len(query) < 2 {
-		b.sendMessage(userID, "❌ Запрос слишком короткий (минимум 2 символа)")
+		b.sendMessage(user.TelegramID, "❌ Запрос слишком короткий (минимум 2 символа)")
 		return
 	}
 
 	products, err := b.shopService.SearchProducts(ctx, user.SelectedShopID, query)
 	if err != nil {
-		log.Printf("Error searching products: %v", err)
-		b.sendMessage(userID, "❌ Ошибка поиска")
+		b.logger.Error("failed to search products", "error", err)
+		b.sendMessage(user.TelegramID, "❌ Ошибка поиска")
 		return
 	}
 
 	if len(products) == 0 {
-		b.sendMessage(userID, fmt.Sprintf("🔍 По запросу <b>%s</b> ничего не найдено", query))
+		b.sendMessage(user.TelegramID, fmt.Sprintf("🔍 По запросу <b>%s</b> ничего не найдено", query))
 		return
 	}
 
@@ -446,7 +456,7 @@ func (b *Bot) handleSearch(ctx context.Context, userID int64, user *domain.User,
 		sb.WriteString(fmt.Sprintf("%d. <b>%s</b>\n   %s | <a href=\"%s\">Ссылка</a>\n\n", i+1, p.Name, stock, p.URL))
 	}
 
-	b.sendMessage(userID, sb.String())
+	b.sendMessage(user.TelegramID, sb.String())
 }
 
 func (b *Bot) handleTrack(ctx context.Context, userID int64, user *domain.User, query string) {
