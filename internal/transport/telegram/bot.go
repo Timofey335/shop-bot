@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
-	"shop-bot/internal/domain"
-	"shop-bot/internal/repository"
-	"shop-bot/internal/repository/redis"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+
+	"shop-bot/internal/domain"
+	"shop-bot/internal/repository"
+	"shop-bot/internal/repository/redis"
 )
 
 type Bot struct {
@@ -163,7 +164,7 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 		b.handleSearch(ctx, userID, user, args)
 	case strings.HasPrefix(text, "/track"):
 		args := strings.TrimSpace(strings.TrimPrefix(text, "/track"))
-		b.handleTrack(ctx, userID, user, args)
+		b.handleTrack(ctx, user, args)
 	default:
 		b.sendMessage(userID, "❓ Неизвестная команда. Используйте /start")
 	}
@@ -175,6 +176,9 @@ func (b *Bot) handleStateInput(ctx context.Context, user *domain.User, state *re
 		b.handleShopInput(ctx, user.TelegramID, text)
 	case "waiting_search":
 		b.handleSearchInput(ctx, user, text)
+	case "waiting_track":
+		b.handleTrackInput(ctx, user, text)
+
 	}
 }
 
@@ -459,7 +463,7 @@ func (b *Bot) productSearch(ctx context.Context, user *domain.User, query string
 	b.sendMessage(user.TelegramID, sb.String())
 }
 
-func (b *Bot) handleTrack(ctx context.Context, userID int64, user *domain.User, query string) {
+func (b *Bot) _handleTrack(ctx context.Context, userID int64, user *domain.User, query string) {
 	b.logger.Debug("handleTrack", "User ID", user.ID, "Telegram ID", user.TelegramID)
 	// Проверяем, выбран ли магазин
 	if user.SelectedShopID == "" {
@@ -499,6 +503,67 @@ func (b *Bot) handleTrack(ctx context.Context, userID int64, user *domain.User, 
 	}
 
 	b.sendMessage(userID, fmt.Sprintf(
+		"✅ Задача отслеживания создана!\n\n"+
+			"🔍 Ищем: <b>%s</b>\n"+
+			"🏪 Магазин: %s\n"+"%s\n\n"+
+			"Когда товар появится в наличии — пришлю уведомление.",
+		task.Query, shopName, targetInfo,
+	))
+}
+
+func (b *Bot) handleTrackInput(ctx context.Context, user *domain.User, query string) {
+	b.stateMgr.ClearState(ctx, user.TelegramID)
+
+	b.setTrack(ctx, user, query)
+}
+
+func (b *Bot) handleTrack(ctx context.Context, user *domain.User, query string) {
+	if user.SelectedShopID == "" {
+		b.sendMessage(user.TelegramID, "❌ Сначала выберите магазин: /shops")
+		return
+	}
+
+	if query != "" {
+		b.setTrack(ctx, user, query)
+		return
+	}
+
+	b.stateMgr.SetState(ctx, user.TelegramID, &redis.UserState{
+		Step: "waiting_track",
+	})
+
+	b.sendMessage(user.TelegramID, "Введите название товара для отслеживания:\n<code>/track молоко 3.2</code>")
+}
+
+func (b *Bot) setTrack(ctx context.Context, user *domain.User, query string) {
+	b.logger.Debug("handleTrack", "User ID", user.ID, "Telegram ID", user.TelegramID)
+
+	if len(query) < 2 {
+		b.sendMessage(user.TelegramID, "❌ Запрос слишком короткий (минимум 2 символа)")
+		return
+	}
+
+	shopName, err := b.shopService.GetShopName(ctx, user.SelectedShopID)
+	if err != nil {
+		shopName = user.SelectedShopID
+	}
+
+	task, err := b.trackingService.CreateTask(ctx, user.ID, user.SelectedShopID, query)
+	if err != nil {
+		b.logger.Error("failed to create tracking task",
+			"error", err,
+			"user_id", user.TelegramID,
+			"query", query)
+		b.sendMessage(user.TelegramID, "❌ Не удалось создать задачу отслеживания")
+		return
+	}
+
+	var targetInfo string
+	if task.TargetName != "" {
+		targetInfo = fmt.Sprintf("\n\nНайден товар: <b>%s</b>", task.TargetName)
+	}
+
+	b.sendMessage(user.TelegramID, fmt.Sprintf(
 		"✅ Задача отслеживания создана!\n\n"+
 			"🔍 Ищем: <b>%s</b>\n"+
 			"🏪 Магазин: %s\n"+"%s\n\n"+
