@@ -65,7 +65,7 @@ func main() {
 
 	go bot.Start(ctx)
 
-	tracker := worker.NewTracker(trackingService, userRepo, shopService, logger, bot, 1*time.Minute)
+	tracker := worker.NewTracker(trackingService, userRepo, shopService, logger, bot, 15*time.Minute)
 	go tracker.Start(ctx)
 
 	logger.Info("Bot started")

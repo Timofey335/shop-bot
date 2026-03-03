@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
-	"strings"
-
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-
 	"shop-bot/internal/domain"
 	"shop-bot/internal/repository"
 	"shop-bot/internal/repository/redis"
+	"strings"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 type Bot struct {
@@ -33,6 +32,20 @@ func NewBot(token string,
 	api, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bot: %w", err)
+	}
+
+	commands := []tgbotapi.BotCommand{
+		{Command: "start", Description: "Начать работу"},
+		{Command: "shops", Description: "Список магазинов"},
+		{Command: "setshop", Description: "Выбрать магазин"},
+		{Command: "products", Description: "Товары магазина"},
+		{Command: "search", Description: "Найти товар"},
+		{Command: "track", Description: "Отследить товар"},
+	}
+
+	_, err = api.Request(tgbotapi.NewSetMyCommands(commands...))
+	if err != nil {
+		logger.Error("failed to set commands", "error", err)
 	}
 
 	api.Debug = false
@@ -280,7 +293,7 @@ func (b *Bot) setShop(ctx context.Context, userID int64, user *domain.User, args
 
 	user.SelectedShopID = args
 
-	b.sendMessage(userID, fmt.Sprintf("✅ Выбран магазин: <b>%s</b>\n\nТеперь доступны:\n/products — все товары\n/search — поиск", shopName))
+	b.sendMessage(userID, fmt.Sprintf("✅ Выбран магазин: <b>%s</b>\n\nТеперь доступны:\n/products — все товары\n/search — поиск\n/track — отслеживание товаров", shopName))
 }
 
 func (b *Bot) handleSetShop(ctx context.Context, userID int64, user *domain.User, args string) {
@@ -463,54 +476,6 @@ func (b *Bot) productSearch(ctx context.Context, user *domain.User, query string
 	b.sendMessage(user.TelegramID, sb.String())
 }
 
-func (b *Bot) _handleTrack(ctx context.Context, userID int64, user *domain.User, query string) {
-	b.logger.Debug("handleTrack", "User ID", user.ID, "Telegram ID", user.TelegramID)
-	// Проверяем, выбран ли магазин
-	if user.SelectedShopID == "" {
-		b.sendMessage(userID, "❌ Сначала выберите магазин: /shops")
-		return
-	}
-
-	shopName, err := b.shopService.GetShopName(ctx, user.SelectedShopID)
-	if err != nil {
-		shopName = user.SelectedShopID
-	}
-
-	// Проверка на пустой запрос
-	if query == "" {
-		b.sendMessage(userID, "Введите название товара для отслеживания:\n<code>/track молоко 3.2</code>")
-		return
-	}
-
-	if len(query) < 2 {
-		b.sendMessage(userID, "❌ Запрос слишком короткий (минимум 2 символа)")
-		return
-	}
-
-	task, err := b.trackingService.CreateTask(ctx, user.ID, user.SelectedShopID, query)
-	if err != nil {
-		b.logger.Error("failed to create tracking task",
-			"error", err,
-			"user_id", userID,
-			"query", query)
-		b.sendMessage(userID, "❌ Не удалось создать задачу отслеживания")
-		return
-	}
-
-	var targetInfo string
-	if task.TargetName != "" {
-		targetInfo = fmt.Sprintf("\n\nНайден товар: <b>%s</b>", task.TargetName)
-	}
-
-	b.sendMessage(userID, fmt.Sprintf(
-		"✅ Задача отслеживания создана!\n\n"+
-			"🔍 Ищем: <b>%s</b>\n"+
-			"🏪 Магазин: %s\n"+"%s\n\n"+
-			"Когда товар появится в наличии — пришлю уведомление.",
-		task.Query, shopName, targetInfo,
-	))
-}
-
 func (b *Bot) handleTrackInput(ctx context.Context, user *domain.User, query string) {
 	b.stateMgr.ClearState(ctx, user.TelegramID)
 
@@ -537,6 +502,11 @@ func (b *Bot) handleTrack(ctx context.Context, user *domain.User, query string) 
 
 func (b *Bot) setTrack(ctx context.Context, user *domain.User, query string) {
 	b.logger.Debug("handleTrack", "User ID", user.ID, "Telegram ID", user.TelegramID)
+
+	if user.SelectedShopID == "" {
+		b.sendMessage(user.TelegramID, "❌ Сначала выберите магазин: /shops")
+		return
+	}
 
 	if len(query) < 2 {
 		b.sendMessage(user.TelegramID, "❌ Запрос слишком короткий (минимум 2 символа)")
