@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
-	"shop-bot/internal/domain"
-	"shop-bot/internal/repository"
-	"shop-bot/internal/repository/redis"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+
+	"shop-bot/internal/domain"
+	"shop-bot/internal/repository"
+	"shop-bot/internal/repository/redis"
 )
 
 type Bot struct {
@@ -186,12 +187,11 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 func (b *Bot) handleStateInput(ctx context.Context, user *domain.User, state *redis.UserState, text string) {
 	switch state.Step {
 	case "waiting_shop":
-		b.handleShopInput(ctx, user.TelegramID, text)
+		b.handleShopInput(ctx, user, text)
 	case "waiting_search":
 		b.handleSearchInput(ctx, user, text)
 	case "waiting_track":
 		b.handleTrackInput(ctx, user, text)
-
 	}
 }
 
@@ -246,26 +246,19 @@ func (b *Bot) handleShops(ctx context.Context, userID int64) {
 	b.sendMessage(userID, sb.String())
 }
 
-func (b *Bot) handleShopInput(ctx context.Context, userID int64, shopID string) {
-	b.stateMgr.ClearState(ctx, userID)
+func (b *Bot) handleShopInput(ctx context.Context, user *domain.User, shopID string) {
+	b.stateMgr.ClearState(ctx, user.TelegramID)
 
-	user, err := b.userRepo.GetByTelegramID(ctx, userID)
-	if err != nil {
-		b.logger.Error("failed to get user", "error", err)
-		b.sendMessage(userID, "❌ Ошибка. Попробуйте /setshop снова.")
-		return
-	}
-
-	b.setShop(ctx, userID, user, shopID)
+	b.setShop(ctx, user, shopID)
 }
 
 // обработка команды /setshop
-func (b *Bot) setShop(ctx context.Context, userID int64, user *domain.User, args string) {
+func (b *Bot) setShop(ctx context.Context, user *domain.User, args string) {
 	shops, err := b.shopService.GetShops(ctx)
 	if err != nil {
 		b.logger.Error("Error validating shop",
 			"error", err)
-		b.sendMessage(userID, "❌ Ошибка проверки магазина")
+		b.sendMessage(user.TelegramID, "❌ Ошибка проверки магазина")
 		return
 	}
 
@@ -280,25 +273,25 @@ func (b *Bot) setShop(ctx context.Context, userID int64, user *domain.User, args
 	}
 
 	if !valid {
-		b.sendMessage(userID, "❌ Магазин не найден. Используйте /shops для списка.")
+		b.sendMessage(user.TelegramID, "❌ Магазин не найден. Используйте /shops для списка.")
 		return
 	}
 
 	if err := b.userRepo.UpdateSelectedShop(ctx, user.TelegramID, args); err != nil {
 		b.logger.Error("Error saving shop",
 			"error", err)
-		b.sendMessage(userID, "❌ Не удалось сохранить выбор")
+		b.sendMessage(user.TelegramID, "❌ Не удалось сохранить выбор")
 		return
 	}
 
 	user.SelectedShopID = args
 
-	b.sendMessage(userID, fmt.Sprintf("✅ Выбран магазин: <b>%s</b>\n\nТеперь доступны:\n/products — все товары\n/search — поиск\n/track — отслеживание товаров", shopName))
+	b.sendMessage(user.TelegramID, fmt.Sprintf("✅ Выбран магазин: <b>%s</b>\n\nТеперь доступны:\n/products — все товары\n/search — поиск\n/track — отслеживание товаров", shopName))
 }
 
 func (b *Bot) handleSetShop(ctx context.Context, userID int64, user *domain.User, args string) {
 	if args != "" {
-		b.setShop(ctx, userID, user, args)
+		b.setShop(ctx, user, args)
 		return
 	}
 
@@ -354,7 +347,6 @@ func (b *Bot) handleProducts(ctx context.Context, userID int64, user *domain.Use
 	}
 
 	var sb strings.Builder
-	// sb.WriteString(fmt.Sprintf("📦 <b>Товары магазина %s</b>\n\n", shopName))
 	sb.WriteString(fmt.Sprintf("📦 <b>%s</b> (страница %d/%d)\n\n", shopName, page+1, totalPages))
 
 	for i := start; i < end; i++ {
