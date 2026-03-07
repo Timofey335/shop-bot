@@ -86,8 +86,9 @@ func (b *Bot) Start(ctx context.Context) {
 
 func (b *Bot) handleStart(userID int64, user *domain.User) {
 	var shopInfo string
+	shopName, _ := b.shopService.GetShopName(user.SelectedShopID)
 	if user.SelectedShopID != "" {
-		shopInfo = fmt.Sprintf("\n\n🏪 Выбранный магазин: <b>%s</b>", user.SelectedShopID)
+		shopInfo = fmt.Sprintf("\n\n🏪 Выбранный магазин: <b>%s</b>", shopName)
 	}
 
 	text := fmt.Sprintf(
@@ -312,7 +313,7 @@ func (b *Bot) handleProducts(ctx context.Context, userID int64, user *domain.Use
 		return
 	}
 
-	shopName, err := b.shopService.GetShopName(ctx, user.SelectedShopID)
+	shopName, err := b.shopService.GetShopName(user.SelectedShopID)
 	if err != nil {
 		shopName = user.SelectedShopID
 	}
@@ -505,7 +506,7 @@ func (b *Bot) setTrack(ctx context.Context, user *domain.User, query string) {
 		return
 	}
 
-	shopName, err := b.shopService.GetShopName(ctx, user.SelectedShopID)
+	shopName, err := b.shopService.GetShopName(user.SelectedShopID)
 	if err != nil {
 		shopName = user.SelectedShopID
 	}

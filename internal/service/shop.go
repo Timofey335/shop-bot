@@ -57,7 +57,21 @@ func (s *ShopService) SearchProducts(ctx context.Context, shopID, query string) 
 	return products, nil
 }
 
-func (s *ShopService) GetShopName(ctx context.Context, shopID string) (string, error) {
+var shopNames = map[string]string{
+	"218999": "СИЗО 1",
+	"219013": "СИЗО 3",
+	"221918": "СИЗО 4",
+	"221917": "ЛИУ 15",
+}
+
+func (s *ShopService) GetShopName(shopID string) (string, error) {
+	if name, ok := shopNames[shopID]; ok {
+		return name, nil
+	}
+	return shopID, nil // Fallback на ID
+}
+
+func (s *ShopService) _GetShopName(ctx context.Context, shopID string) (string, error) {
 	shops, err := s.GetShops(ctx)
 	if err != nil {
 		return "", err

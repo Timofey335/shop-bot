@@ -93,7 +93,7 @@ func (t *Tracker) notify(ctx context.Context, task *domain.TrackingTask) {
 		return
 	}
 
-	shopName, err := t.shopService.GetShopName(ctx, task.ShopID)
+	shopName, err := t.shopService.GetShopName(task.ShopID)
 	if err != nil {
 		shopName = task.ShopID
 	}

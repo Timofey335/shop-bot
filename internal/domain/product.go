@@ -20,5 +20,5 @@ type ShopService interface {
 	GetShops(ctx context.Context) ([]Shop, error)
 	GetProducts(ctx context.Context, shopID string) ([]Product, error)
 	SearchProducts(ctx context.Context, shopID string, query string) ([]Product, error)
-	GetShopName(ctx context.Context, shopID string) (string, error)
+	GetShopName(shopID string) (string, error)
 }
