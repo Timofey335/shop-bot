@@ -53,7 +53,7 @@ func main() {
 	trackingRepo := postgres.NewTrackingRepo(pool)
 
 	shopService := service.NewShopService(cfg.PythonAPIURL)
-	trackingService := service.NewTrackingService(trackingRepo, shopService)
+	trackingService := service.NewTrackingService(logger, trackingRepo, shopService)
 
 	bot, err := telegram.NewBot(cfg.TelegramToken, logger, userRepo, shopService, trackingService, stateMgr)
 	if err != nil {

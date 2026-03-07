@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"fmt"
-	"log"
 	"log/slog"
 	"shop-bot/internal/domain"
 	"time"
@@ -116,7 +115,6 @@ func (t *Tracker) notify(ctx context.Context, task *domain.TrackingTask) {
 		return
 	}
 
-	log.Printf("Task %d completed, user notified", task.ID)
 	t.logger.Info("task complited, user notified",
 		"task_id", task.ID,
 		"user_id", user.TelegramID,

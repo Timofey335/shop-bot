@@ -3,17 +3,19 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"shop-bot/internal/domain"
 )
 
 type TrackingService struct {
+	logger      *slog.Logger
 	repo        domain.TrackingRepository
 	shopService domain.ShopService
 }
 
-func NewTrackingService(repo domain.TrackingRepository, shop domain.ShopService) *TrackingService {
+func NewTrackingService(logger *slog.Logger, repo domain.TrackingRepository, shop domain.ShopService) *TrackingService {
 	return &TrackingService{
+		logger:      logger,
 		repo:        repo,
 		shopService: shop,
 	}
@@ -21,7 +23,7 @@ func NewTrackingService(repo domain.TrackingRepository, shop domain.ShopService)
 
 // CreateTask создает задачу отслеживания
 func (s *TrackingService) CreateTask(ctx context.Context, userID int64, shopID, query string) (*domain.TrackingTask, error) {
-	log.Printf("Creating task: userID=%d, shopID=%s", userID, shopID)
+	s.logger.Info("Creating task", "userID", userID, "shopID", shopID)
 	products, err := s.shopService.SearchProducts(ctx, shopID, query)
 	if err != nil {
 		return nil, fmt.Errorf("search failed: %w", err)
