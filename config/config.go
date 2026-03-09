@@ -28,8 +28,8 @@ type Config struct {
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		DBHost:        getEnv("DB_Host", "localhost"),
-		DBPort:        getEnv("DB_Posrt", "5432"),
+		DBHost:        getEnv("DB_HOST", "localhost"),
+		DBPort:        getEnv("DB_PORT", "5432"),
 		DBUser:        getEnv("DB_USER", "botuser"),
 		DBPassword:    getEnv("DB_PASSWORD", "botpass"),
 		DBName:        getEnv("DB_NAME", "shopbot"),
